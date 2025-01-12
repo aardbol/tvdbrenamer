@@ -53,7 +53,7 @@ def fetch_episodes(series_id: int) -> List[Dict]:
         logging.error(f"Error fetching episode data: {e}")
         raise
 
-def rename_files(series_id: int, directory: str = '.', season: Optional[int] = None) -> None:
+def rename_files(series_id: int, directory: str = '.', season: Optional[int] = None, force: bool = False) -> None:
     """Rename files in the directory based on TheTVDB metadata."""
     if not os.path.exists(directory):
         logging.error(f"Directory '{directory}' does not exist.")
@@ -69,7 +69,9 @@ def rename_files(series_id: int, directory: str = '.', season: Optional[int] = N
         return
     logging.info(f"Episodes found for {'all seasons' if season is None else f'season {season}'}: {len(episodes)}")
 
-    season_start = calculate_season_start(series_episodes, season)
+    # The calculation fails with some series where the numbering is not sequential,
+    # maybe due to specials being part  of the main season
+    season_start = calculate_season_start(series_episodes, season) if not force else 1
     season_end = season_start + len(episodes) - 1
     logging.debug(f"Absolute episode numbering for Season {season} ends at: {season_end}")
 
@@ -99,7 +101,7 @@ def rename_files(series_id: int, directory: str = '.', season: Optional[int] = N
     files_to_process.extend([f"{series_name} {episode_number}{PLACEHOLDER_EXTENSION}" for episode_number in missing_episodes])
     files_to_process.sort(key=sort_by_season_and_episode)
 
-    # Reset episode numbering if needed
+    # Reset episode numbering if the files do not start from 1
     if file_episode_numbers and min(file_episode_numbers) != 1 and confirm_reset_numbering():
         files_to_process = reset_episode_numbering(files_to_process, directory, series_name, episode_map)
     else:
@@ -286,6 +288,7 @@ def filter_valid_episode_numbers(files: List[str], series_name: str, season_star
     valid_episode_numbers = {}
     for filename in files:
         if is_renamed_file(filename, series_name, season):
+            logging.debug(f"Filtering out {filename}: Already correctly named.")
             continue
 
         episode_number = extract_episode_number(filename, series_name)
@@ -371,9 +374,13 @@ def main():
     parser.add_argument("--season", type=int, help="Season number.")
     parser.add_argument("--directory", default=".", help="Directory containing the files to rename.")
     parser.add_argument("--dry-run", action="store_true", help="Preview changes without renaming files.")
+    parser.add_argument("--force", action="store_true", help="Force renaming, starting from episode 1 and accounting for missing episodes.")
 
     args = parser.parse_args()
     DRY_RUN = args.dry_run
+
+    if args.force:
+        logging.info(f"Force mode enabled. Renaming will start from episode 1.")
 
     if not args.season:
         if re.match(r"Season \d+", str(args.directory)):
@@ -394,7 +401,8 @@ def main():
     rename_files(
         series_id=args.series_id,
         directory=args.directory,
-        season=args.season
+        season=args.season,
+        force=args.force
     )
 
 if __name__ == "__main__":
