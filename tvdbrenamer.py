@@ -62,59 +62,66 @@ def rename_files(series_id: int, directory: str = '.', season: Optional[int] = N
     series_name = fetch_series(series_id)['name']
     series_episodes = fetch_episodes(series_id)
 
-    if season is not None:
-        episodes = [ep for ep in series_episodes if ep['seasonNumber'] == season]
-        if not episodes:
-            logging.error(f"No episodes found for series ID {series_id} in season {season}.")
-            return
-        logging.info(f"Episodes found for season {season}: {len(episodes)}")
-    else:
-        episodes = series_episodes
-        logging.info(f"Episodes found for all seasons: {len(episodes)}")
+    # Filter episodes for the specified season
+    episodes = [ep for ep in series_episodes if ep['seasonNumber'] == season] if season is not None else series_episodes
+    if not episodes:
+        logging.error(f"No episodes found for series ID {series_id} in season {season}.")
+        return
+    logging.info(f"Episodes found for {'all seasons' if season is None else f'season {season}'}: {len(episodes)}")
 
-    season_start = calculate_season_start(series_episodes, season) if season else 1
-    season_end = len(episodes)
+    season_start = calculate_season_start(series_episodes, season)
+    season_end = season_start + len(episodes) - 1
+    logging.debug(f"Absolute episode numbering for Season {season} ends at: {season_end}")
+
     episodes.sort(key=lambda ep: ep['number'])
     episode_map = {ep['number']: ep for ep in episodes}
 
-    files = [f for f in os.listdir(directory) if is_supported_file(f) and not is_renamed_file(f, series_name, season)]
-    files.sort(key=sort_by_season_and_episode)
-
-    file_episode_numbers = extract_episode_numbers(files, series_name)
-    if not files:
+    all_files = [f for f in os.listdir(directory) if is_supported_file(f)]
+    if not all_files:
         logging.info("No files found in the directory. Nothing to do.")
         return
-    elif not file_episode_numbers:
-        logging.error("No valid episode numbers found in the directory.")
+
+    file_episode_mapping = filter_valid_episode_numbers(all_files, series_name, season_start, season_end, season)
+    if not file_episode_mapping:
+        logging.info(f"No episodes in the directory belong to Season {season}.")
         return
 
-    missing_episodes = sorted(set(range(season_start, season_end + 1)) - set(file_episode_numbers))
+    file_episode_numbers = set(file_episode_mapping.values())
+    missing_episodes = sorted(set(range(season_start, season_end + 1)) - file_episode_numbers)
+    logging.debug(f"Missing episodes: {missing_episodes}")
 
     if missing_episodes:
-        logging.debug(f"Missing episodes: {missing_episodes}")
+        logging.info(f"Missing episodes found")
         create_placeholder_files(directory, missing_episodes, series_name)
-        files.extend([f"{series_name} {episode_number}{PLACEHOLDER_EXTENSION}" for episode_number in missing_episodes])
-        files.sort(key=sort_by_season_and_episode)
 
-    # Reset episode numbering if the files do not start from 1
+    # Files to process: exclude already correctly renamed files
+    files_to_process = [f for f in all_files if not is_renamed_file(f, series_name, season)]
+    files_to_process.extend([f"{series_name} {episode_number}{PLACEHOLDER_EXTENSION}" for episode_number in missing_episodes])
+    files_to_process.sort(key=sort_by_season_and_episode)
+
+    # Reset episode numbering if needed
     if file_episode_numbers and min(file_episode_numbers) != 1 and confirm_reset_numbering():
-        reset_episode_numbering(files, directory, series_name, episode_map)
-
-    # Refresh the file list after all the changes
-    files = [f for f in os.listdir(directory) if (is_supported_file(f) and not is_renamed_file(f, series_name, season)) or f.endswith(PLACEHOLDER_EXTENSION)]
-    files.sort(key=sort_by_season_and_episode)
+        files_to_process = reset_episode_numbering(files_to_process, directory, series_name, episode_map)
+    else:
+        files_to_process = sorted(
+            [f for f in os.listdir(directory)
+             if (is_supported_file(f) and not is_renamed_file(f, series_name, season)) or f.endswith(PLACEHOLDER_EXTENSION)],
+            key=sort_by_season_and_episode
+        )
 
     logging.info("--- Starting the renaming process ---")
-
-    for idx, filename in enumerate(files):
+    for filename in files_to_process:
         file_path = os.path.join(directory, filename)
         base_filename, file_extension = os.path.splitext(filename)
 
-        episode_number = extract_episode_number(filename, series_name)
-        if episode_number is None or episode_number == -1:
-            logging.warning(f"Skipping {filename}: Could not determine episode number.")
-            continue
-        elif episode_number not in episode_map:
+        episode_number = file_episode_mapping.get(filename)
+        if episode_number is None:
+            episode_number = extract_episode_number(filename, series_name)
+            if episode_number is None or episode_number == -1:
+                logging.warning(f"Skipping {filename}: Could not determine episode number.")
+                continue
+
+        if episode_number not in episode_map:
             logging.warning(f"Skipping {filename}: No match found for episode number {episode_number}.")
             continue
 
@@ -150,11 +157,11 @@ def generate_new_filename(series_name: str, episode: Dict, file_extension: str) 
 def extract_episode_number(filename: str, series_name: str) -> Optional[int]:
     """Extract episode number from a filename, as accurately as possible."""
     explicit_patterns = [
-        r'(?:ep|episode|s\d+e)[\s._-]*(\d+)',
+        r'(?:ep|episode|s\d+\s?e)[\s._-]*(\d+)',
     ]
     unsupported_patterns = [
         # Multi-episode files (e.g., "S01E03-04")
-        r'(\d+)[-_](\d+)',
+        r'E?(\d+)[-_]E?(\d+)',
         # Episode numbers with a dot (e.g., "S01E03.04")
         r'(\d+)[.](\d+)',
     ]
@@ -191,13 +198,14 @@ def extract_episode_number(filename: str, series_name: str) -> Optional[int]:
         logging.debug(f"Extracted episode number: {episode_number} from {filename}")
         return episode_number
 
+    logging.warning(f"Could not extract episode number from {filename}")
     return None
 
 def sort_by_season_and_episode(file_name: str) -> Tuple[int, int]:
     """Generate a sorting key for filenames based on season and episode numbers."""
     pattern_match = re.search(r'S(\d+)E(\d+)', file_name)
     if pattern_match:
-        return int(pattern_match.group(1)), int(pattern_match.group(2))
+        return 0, int(pattern_match.group(2))
     numbers = list(map(int, re.findall(r'\d+', file_name)))
     return (0, *numbers) if numbers else (0, 0)
 
@@ -211,23 +219,19 @@ def is_renamed_file(file_name: str, series_name: str, season: Optional[int]) -> 
     The filename must match the pattern: SeriesName SXXEYY - EpisodeName.ext,
     and the season number in the filename must match the folder's season.
     """
-    # Escape special characters in the series name for regex
     safe_series_name = re.escape(series_name)
 
-    # Match the filename against the pattern
     pattern = rf'^{safe_series_name}\sS(\d+)E\d+.*\.\w+$'
     match = re.match(pattern, file_name, re.IGNORECASE)
-
     if not match:
-        return False  # Filename does not match the pattern
+        return False
 
-    # Extract the season number from the filename
     filename_season = int(match.group(1))
-
-    # Check if the season number matches the folder's season
     if season is not None and filename_season != season:
-        return False  # Season number mismatch
+        logging.debug(f"Skipping {file_name}: Season number mismatch (expected: {season}, found: {filename_season}).")
+        return False
 
+    logging.info(f"{Fore.LIGHTYELLOW_EX}Skipping{Style.RESET_ALL} {file_name}: Already correctly named.")
     return True
 
 def confirm_reset_numbering() -> bool:
@@ -237,13 +241,16 @@ def confirm_reset_numbering() -> bool:
     if not DRY_RUN:
         print(f"{Fore.LIGHTRED_EX}If you decide to skip this step, it could make unwanted changes!{Style.RESET_ALL}")
 
-    response = input(f"{Fore.LIGHTGREEN_EX}Do you want to reset the episode numbering to match the TVDB series? (yes/NO):{Style.RESET_ALL} ").strip().lower()
-    logging.info(f"User response: {response if response else 'NO'}")
+    response = input(f"{Fore.LIGHTGREEN_EX}Do you want to reset the episode numbering to match the TVDB series? (YES/no):{Style.RESET_ALL} ").strip().lower()
+    response = response if response else "y"
+    logging.info(f"User response: {response}")
     return response in {"yes", "y"}
 
-def reset_episode_numbering(files: List[str], directory: str, series_name: str, episode_map: Dict[int, Dict]) -> None:
+def reset_episode_numbering(files: List[str], directory: str, series_name: str, episode_map: Dict[int, Dict]) -> List[str]:
     """Reset episode numbering starting from 1."""
     new_episode_number = 1
+    # Needed for Dry-run correctness
+    new_files = []
     for idx, filename in enumerate(files):
         file_path = os.path.join(directory, filename)
         base_filename, file_extension = os.path.splitext(filename)
@@ -256,6 +263,7 @@ def reset_episode_numbering(files: List[str], directory: str, series_name: str, 
         episode = {'seasonNumber': None, 'number': new_episode_number, 'name': ''}
         new_filename = generate_new_filename(series_name, episode, file_extension)
         new_path = os.path.join(directory, new_filename)
+        new_files.append(new_filename)
 
         if DRY_RUN:
             print(f"Would rename: {filename} -> {new_filename}")
@@ -268,22 +276,34 @@ def reset_episode_numbering(files: List[str], directory: str, series_name: str, 
 
         new_episode_number += 1
 
-def extract_episode_numbers(files: List[str], series_name: str) -> List[int]:
-    """Extract episode numbers from filenames in the directory."""
-    episode_numbers = []
+    return new_files
+
+def filter_valid_episode_numbers(files: List[str], series_name: str, season_start: int, season_end: int, season: Optional[int]) -> Dict[str, int]:
+    """
+    Extract and validate episode numbers from filenames.
+    Returns a mapping from filenames to episode numbers within the specified season range.
+    """
+    valid_episode_numbers = {}
     for filename in files:
+        if is_renamed_file(filename, series_name, season):
+            continue
+
         episode_number = extract_episode_number(filename, series_name)
-        if episode_number is not None and episode_number != -1:
-            episode_numbers.append(episode_number)
-    return sorted(episode_numbers)
+        if episode_number is None or episode_number == -1:
+            continue
+        if episode_number < season_start or episode_number > season_end:
+            logging.warning(f"Skipping {filename}, because the episode number is outside the range for the season.")
+            continue
+        valid_episode_numbers[filename] = episode_number
+    return valid_episode_numbers
 
 def calculate_season_start(all_episodes: List[Dict], season: int) -> int:
     """
     Calculate the starting absolute episode number for a season based on previous seasons' total.
     Also logs the total number of episodes per season for debugging purposes.
     """
-    if season == 1:
-        logging.debug("Season 1 starts at episode 1.")
+    if season in [None, 0, 1]:
+        logging.debug("Season 1 and specials start at episode 1.")
         return 1
 
     seasons = {}
@@ -298,7 +318,7 @@ def calculate_season_start(all_episodes: List[Dict], season: int) -> int:
 
     previous_season_episodes = [ep for ep in all_episodes if season > ep['seasonNumber'] > 0]
     season_start = sum(1 for _ in previous_season_episodes) + 1
-    logging.debug(f"Episode numbering for Season {season} starts at {season_start}.")
+    logging.debug(f"Absolute episode numbering for Season {season} starts at {season_start}.")
 
     return season_start
 
@@ -341,7 +361,7 @@ def main():
     global DRY_RUN
 
     logger = logging.getLogger()
-    logger.setLevel(logging.INFO)
+    logger.setLevel(logging.DEBUG)
     handler = logging.StreamHandler()
     handler.setFormatter(ColoredFormatter('%(asctime)s - %(levelname)s - %(message)s'))
     logger.addHandler(handler)
@@ -355,9 +375,13 @@ def main():
     args = parser.parse_args()
     DRY_RUN = args.dry_run
 
-    if not args.season and re.match(r"Season \d+", str(args.directory)):
-        args.season = int(re.search(r"Season (\d+)", str(args.directory)).group(1))
-        logging.info(f"Season number detected from directory name: {args.season}")
+    if not args.season:
+        if re.match(r"Season \d+", str(args.directory)):
+            args.season = int(re.search(r"Season (\d+)", str(args.directory)).group(1))
+            logging.info(f"Season number detected from directory name: {args.season}")
+        elif re.match(r"Specials", os.path.basename(args.directory)):
+            args.season = 0
+            logging.info(f"Specials (0) season detected from directory name.")
     elif not args.season and args.directory == ".":
         current_directory = os.path.basename(os.getcwd())
         if re.match(r"Season \d+", current_directory):

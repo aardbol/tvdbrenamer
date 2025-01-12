@@ -25,8 +25,9 @@ class TestEpisodeRenaming(unittest.TestCase):
 
     def test_sort_by_season_and_episode(self):
         # Test sorting with season and episode
-        self.assertEqual(sort_by_season_and_episode("SeriesName S01E01.mkv"), (1, 1))
-        self.assertEqual(sort_by_season_and_episode("SeriesName S02E03.mkv"), (2, 3))
+        self.assertEqual(sort_by_season_and_episode("SeriesName S01E01.mkv"), (0, 1))
+        self.assertEqual(sort_by_season_and_episode("SeriesName S02E03.mkv"), (0, 3))
+        self.assertNotEqual(sort_by_season_and_episode("SeriesName S03E01.mkv"), (3, 1))
 
         # Test sorting with standalone numbers
         self.assertEqual(sort_by_season_and_episode("SeriesName 04.mkv"), (0, 4))
