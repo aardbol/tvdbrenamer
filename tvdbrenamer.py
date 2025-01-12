@@ -31,7 +31,17 @@ class ColoredFormatter(logging.Formatter):
 
 
 def fetch_series(series_id: int) -> Dict:
-    """Fetch series details from TheTVDB based on the series ID."""
+    """Fetch series details from TheTVDB based on the series ID.
+
+        Args:
+            series_id (int): The ID of the series to fetch details for.
+
+        Returns:
+            Dict: A dictionary containing the series details.
+
+        Raises:
+            Exception: If there is an error fetching the series details.
+    """
     try:
         logging.debug(f"Fetching details for series ID {series_id} in lang {LANG}")
         series = tvdb.get_series_translation(series_id, LANG)
@@ -42,7 +52,17 @@ def fetch_series(series_id: int) -> Dict:
         raise
 
 def fetch_episodes(series_id: int) -> List[Dict]:
-    """Fetch episodes from TheTVDB based on the series ID."""
+    """Fetch episodes from TheTVDB based on the series ID.
+
+        Args:
+            series_id (int): The ID of the series to fetch episodes for.
+
+        Returns:
+            List[Dict]: A list of dictionaries containing episode details.
+
+        Raises:
+            Exception: If there is an error fetching the episode data.
+    """
     try:
         episodes = tvdb.get_series_episodes(series_id, lang=LANG)
         if not episodes or 'episodes' not in episodes:
@@ -54,7 +74,14 @@ def fetch_episodes(series_id: int) -> List[Dict]:
         raise
 
 def rename_files(series_id: int, directory: str = '.', season: Optional[int] = None, force: bool = False) -> None:
-    """Rename files in the directory based on TheTVDB metadata."""
+    """Rename files in the directory based on TheTVDB metadata.
+
+        Args:
+            series_id (int): The ID of the series to fetch metadata for.
+            directory (str): The directory containing the files to rename. Defaults to the current directory.
+            season (Optional[int]): The season number to filter episodes by. If None, all seasons are considered.
+            force (bool): If True, forces renaming starting from episode 1.
+    """
     if not os.path.exists(directory):
         logging.error(f"Directory '{directory}' does not exist.")
         return
@@ -147,9 +174,15 @@ def rename_files(series_id: int, directory: str = '.', season: Optional[int] = N
     remove_placeholder_files(directory)
 
 def generate_new_filename(series_name: str, episode: Dict, file_extension: str) -> str:
-    """
-    Generate the new filename in the format: SeriesName SXXEYY - EpisodeTitle.ext.
-    If the episode title is missing, it uses: SeriesName SXXEYY.ext.
+    """Generate the new filename in the format: SeriesName SXXEYY - EpisodeTitle.ext.
+
+        Args:
+            series_name (str): The name of the series.
+            episode (Dict): A dictionary containing episode details.
+            file_extension (str): The file extension to use for the new filename.
+
+        Returns:
+            str: The new filename.
     """
     formatted_season = f"S{episode['seasonNumber']:02d}" if episode['seasonNumber'] is not None else ""
     formatted_episode = f"E{episode['number']:02d}" if episode['seasonNumber'] is not None else f"{episode['number']:02d}"
@@ -157,7 +190,15 @@ def generate_new_filename(series_name: str, episode: Dict, file_extension: str) 
     return f"{series_name} {formatted_season}{formatted_episode}{episode_name}{file_extension}"
 
 def extract_episode_number(filename: str, series_name: str) -> Optional[int]:
-    """Extract episode number from a filename, as accurately as possible."""
+    """Extract episode number from a filename, as accurately as possible.
+
+        Args:
+            filename (str): The filename to extract the episode number from.
+            series_name (str): The name of the series to help filter out false positives.
+
+        Returns:
+            Optional[int]: The extracted episode number, or None if no number could be extracted.
+    """
     explicit_patterns = [
         r'(?:ep|episode|s\d+\s?e)[\s._-]*(\d+)',
     ]
@@ -204,7 +245,14 @@ def extract_episode_number(filename: str, series_name: str) -> Optional[int]:
     return None
 
 def sort_by_season_and_episode(file_name: str) -> Tuple[int, int]:
-    """Generate a sorting key for filenames based on season and episode numbers."""
+    """Generate a sorting key for filenames based on season and episode numbers.
+
+        Args:
+            file_name (str): The filename to generate a sorting key for.
+
+        Returns:
+            Tuple[int, int]: A tuple containing the season and episode numbers.
+    """
     pattern_match = re.search(r'S(\d+)E(\d+)', file_name)
     if pattern_match:
         return 0, int(pattern_match.group(2))
@@ -212,14 +260,26 @@ def sort_by_season_and_episode(file_name: str) -> Tuple[int, int]:
     return (0, *numbers) if numbers else (0, 0)
 
 def is_supported_file(file_name: str) -> bool:
-    """Check if a file has a supported video extension."""
+    """Check if a file has a supported video extension.
+
+        Args:
+            file_name (str): The filename to check.
+
+        Returns:
+            bool: True if the file has a supported extension, False otherwise.
+    """
     return os.path.splitext(file_name)[1].lower() in SUPPORTED_EXTENSIONS
 
 def is_renamed_file(file_name: str, series_name: str, season: Optional[int]) -> bool:
-    """
-    Check if a file is already renamed correctly according to the folder's season.
-    The filename must match the pattern: SeriesName SXXEYY - EpisodeName.ext,
-    and the season number in the filename must match the folder's season.
+    """Check if a file is already renamed correctly according to the folder's season.
+
+        Args:
+            file_name (str): The filename to check.
+            series_name (str): The name of the series.
+            season (Optional[int]): The season number to check against.
+
+        Returns:
+            bool: True if the file is already correctly named, False otherwise.
     """
     safe_series_name = re.escape(series_name)
 
@@ -249,7 +309,17 @@ def confirm_reset_numbering() -> bool:
     return response in {"yes", "y"}
 
 def reset_episode_numbering(files: List[str], directory: str, series_name: str, episode_map: Dict[int, Dict]) -> List[str]:
-    """Reset episode numbering starting from 1."""
+    """Reset episode numbering starting from 1.
+
+        Args:
+            files (List[str]): The list of filenames to reset numbering for.
+            directory (str): The directory containing the files.
+            series_name (str): The name of the series.
+            episode_map (Dict[int, Dict]): A dictionary mapping episode numbers to episode details.
+
+        Returns:
+            List[str]: The list of new filenames after resetting the numbering.
+     """
     new_episode_number = 1
     # Needed for Dry-run correctness
     new_files = []
@@ -281,9 +351,17 @@ def reset_episode_numbering(files: List[str], directory: str, series_name: str, 
     return new_files
 
 def filter_valid_episode_numbers(files: List[str], series_name: str, season_start: int, season_end: int, season: Optional[int]) -> Dict[str, int]:
-    """
-    Extract and validate episode numbers from filenames.
-    Returns a mapping from filenames to episode numbers within the specified season range.
+    """Extract and validate episode numbers from filenames.
+
+        Args:
+            files (List[str]): The list of filenames to process.
+            series_name (str): The name of the series.
+            season_start (int): The starting episode number for the season.
+            season_end (int): The ending episode number for the season.
+            season (Optional[int]): The season number to filter by.
+
+        Returns:
+            Dict[str, int]: A mapping from filenames to episode numbers within the specified season range.
     """
     valid_episode_numbers = {}
     for filename in files:
@@ -301,9 +379,14 @@ def filter_valid_episode_numbers(files: List[str], series_name: str, season_star
     return valid_episode_numbers
 
 def calculate_season_start(all_episodes: List[Dict], season: int) -> int:
-    """
-    Calculate the starting absolute episode number for a season based on previous seasons' total.
-    Also logs the total number of episodes per season for debugging purposes.
+    """Calculate the starting absolute episode number for a season based on previous seasons' total.
+
+        Args:
+            all_episodes (List[Dict]): A list of all episodes for the series.
+            season (int): The season number to calculate the starting episode for.
+
+        Returns:
+            int: The starting episode number for the season.
     """
     if season in [None, 0, 1]:
         logging.debug("Season 1 and specials start at episode 1.")
@@ -326,7 +409,16 @@ def calculate_season_start(all_episodes: List[Dict], season: int) -> int:
     return season_start
 
 def create_placeholder_files(directory: str, missing_episodes: List[int], series_name: str) -> None:
-    """Create placeholder files for missing episodes."""
+    """Create placeholder files for missing episodes.
+
+        Args:
+            directory (str): The directory to create placeholder files in.
+            missing_episodes (List[int]): The list of missing episode numbers.
+            series_name (str): The name of the series.
+
+        Returns:
+            None
+    """
     for episode_number in missing_episodes:
         # Simulate an episode object for the placeholder
         episode = {'seasonNumber': None, 'number': episode_number, 'name': ''}
@@ -344,7 +436,14 @@ def create_placeholder_files(directory: str, missing_episodes: List[int], series
                     logging.error(f"Failed to create placeholder {placeholder_filename}: {e}")
 
 def remove_placeholder_files(directory: str) -> None:
-    """Remove placeholder files from the directory."""
+    """Remove placeholder files from the directory.
+
+        Args:
+            directory (str): The directory to remove placeholder files from.
+
+        Returns:
+            None
+    """
     if DRY_RUN:
         logging.info(f"Would remove placeholders now")
         return
@@ -360,7 +459,6 @@ def remove_placeholder_files(directory: str) -> None:
 
 
 def main():
-    """Main function to run the script."""
     global DRY_RUN
 
     logger = logging.getLogger()
