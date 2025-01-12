@@ -361,7 +361,7 @@ def main():
     global DRY_RUN
 
     logger = logging.getLogger()
-    logger.setLevel(logging.DEBUG)
+    logger.setLevel(logging.INFO)
     handler = logging.StreamHandler()
     handler.setFormatter(ColoredFormatter('%(asctime)s - %(levelname)s - %(message)s'))
     logger.addHandler(handler)
