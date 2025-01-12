@@ -3,7 +3,8 @@
 This script renames TV episode files in a directory based on metadata from TheTVDB and makes the format compatible with Jellyfin.
 It supports various video file extensions and can handle multiple seasons and episodes.
 
-Series must be sorted into directories by season, e.g. `Season 1`, `Season 2`, etc.
+Series must be sorted into directories by season, e.g. `Season 1`, `Season 2`, etc. and must abide by the default "official"
+season type (usually Aired Order) for Jellyfin metadata to be retrieved properly. The script only supports that season type.
 
 ## Prerequisites
 
