@@ -124,7 +124,7 @@ def rename_files(series_id: int, directory: str = '.', season: Optional[int] = N
         create_placeholder_files(directory, missing_episodes, series_name)
 
     # Files to process: exclude already correctly renamed files
-    files_to_process = [f for f in all_files if not is_renamed_file(f, series_name, season)]
+    files_to_process = [f for f in file_episode_mapping.keys() if not is_renamed_file(f, series_name, season)]
     files_to_process.extend([f"{series_name} {episode_number}{PLACEHOLDER_EXTENSION}" for episode_number in missing_episodes])
     files_to_process.sort(key=sort_by_season_and_episode)
 
