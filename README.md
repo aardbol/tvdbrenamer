@@ -26,9 +26,13 @@ season type (usually Aired Order) for Jellyfin metadata to be retrieved properly
 
 ## Usage
 
+Make the script executable:
+
+`chmod +x tvdbrenamer.py`
+
 Run the script with the following command:
 
-`python3 rename_episodes.py --series-id [--season ] [--directory ] [--dry-run] [--force]`
+`./tvdbrenamer.py --series-id [--season ] [--directory ] [--dry-run] [--force]`
 
 ### Arguments
 
@@ -42,15 +46,15 @@ Run the script with the following command:
 
 To rename episodes in the current directory for season 1 of a series with ID 12345:
 
-`python3 rename_episodes.py --series-id 12345 --season 1`
+`./tvdbrenamer.py --series-id 12345 --season 1`
 
 To preview changes without renaming files and detect the season from the directory name:
 
-`python3 rename_episodes.py --series-id 12345 --directory='Season 1' --dry-run`
+`./tvdbrenamer.py --series-id 12345 --directory='Season 1' --dry-run`
 
 To force renaming starting from episode 1:
 
-`python3 rename_episodes.py --series-id 12345 --season 1 --force`
+`./tvdbrenamer.py --series-id 12345 --season 1 --force`
 
 ## Placeholder Files
 
